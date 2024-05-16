@@ -1,15 +1,18 @@
 from dataset import digits_dataset
 import numpy as np
-from sklearn.metrics import pairwise_distances_argmin, silhouette_score
+from sklearn.metrics import pairwise_distances_argmin, silhouette_score, completeness_score
+
 class Kmeans:
-    def __init__(self, k=10, tol = 1e-4, max_iter=1000, random_state=42):
+    def __init__(self, k=10, tol=1e-4, max_iter=1000, random_state=42):
         self.data = digits_dataset.data
+        self.target = digits_dataset.target
         self.k = k
         self.max_iter = max_iter
         self.random_state = random_state
         self.tol = tol
         self.centroids = None
         self.clusters = None
+        self.cluster_to_label = None
 
     def __str__(self):
         if self.centroids is not None and self.clusters is not None:
@@ -43,15 +46,63 @@ Clusters: {len(self.clusters)} elements"""
 
     def predict(self, test_data):
         return pairwise_distances_argmin(test_data, self.centroids)
-
-    def score(self, test_data):
-        cluster_labels = self.predict(test_data)
-        if len(np.unique(cluster_labels)) > 1:
-            return silhouette_score(test_data, cluster_labels)
+    
+    def silhouette(self):
+        if len(np.unique(self.clusters)) > 1:
+            return silhouette_score(self.data, self.clusters)
         else:
             return -1 
+
+    def completeness(self):
+        return completeness_score(self.target, self.clusters)
+
+    def map_clusters_to_labels(self):
+        cluster_to_label = {}
+        for cluster in range(self.k):
+            cluster_indices = np.where(self.clusters == cluster)[0]
+            true_labels = self.target[cluster_indices]
+            if len(true_labels) > 0:
+                most_common_label = np.bincount(true_labels).argmax()
+                cluster_to_label[cluster] = most_common_label
+        mapped_labels = np.array([cluster_to_label[cluster] for cluster in self.clusters])
+        self.cluster_to_label = cluster_to_label
+        return mapped_labels, cluster_to_label
+
+    def accuracy(self):
+        _, cluster_to_label = self.map_clusters_to_labels()
+        cluster_accuracies = {}
+        for cluster, label in cluster_to_label.items():
+            cluster_indices = np.where(self.clusters == cluster)[0]
+            true_labels = self.target[cluster_indices]
+            accuracy = np.mean(true_labels == label)
+            cluster_accuracies[cluster] = accuracy
+        mean_accuracy = np.mean(list(cluster_accuracies.values()))
+        accuracies_mapped = {cluster: (label, acc) for cluster, label, acc in zip(cluster_to_label.keys(), cluster_to_label.values(), cluster_accuracies.values())}
+        return accuracies_mapped, mean_accuracy
+
+    def summary(self):
+        cluster_accuracies, acc = self.accuracy()
+        cluster_to_label = self.cluster_to_label
+        silhouette_score = self.silhouette()
+        completeness = self.completeness()
+        s = self.__str__() + f"\nMean Accuracy: {acc * 100:.2f}%\nCluster to Label Mapping: {cluster_to_label}\nSilhouette Score: {silhouette_score}\nCompleteness Score: {completeness}\nCluster Accuracies: {cluster_accuracies}\n"
+        print(s)
     
-kmeans = Kmeans()
-kmeans.fit()
-print(kmeans.centroids)
-print(kmeans.clusters)
+    def run(self):
+        self.fit()
+        self.map_clusters_to_labels()
+
+    @classmethod
+    def find_best_k(cls, k_values, tol=1e-4, max_iter=1000, random_state=42):
+        results = []
+        for k in k_values:
+            kmeans = cls(k=k, tol=tol, max_iter=max_iter, random_state=random_state)
+            kmeans.run()
+            map_clusters = kmeans.cluster_to_label
+            clusters_not_found = [i for i in range(10) if i not in map_clusters.values()]
+            _, mean_accuracy = kmeans.accuracy()
+            silhouette = kmeans.silhouette()
+            completeness = kmeans.completeness()
+            if len(clusters_not_found) == 0:
+                results.append((k, mean_accuracy, silhouette, completeness))
+        return results
