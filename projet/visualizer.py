@@ -4,7 +4,8 @@ import numpy as np
 from pprint import pprint
 from sklearn.decomposition import PCA      # Juste pour représenter les graphes sous format 2D
 from sklearn.manifold import TSNE
-from sklearn.metrics import silhouette_score  
+from sklearn.metrics import silhouette_score
+from kmeans import Kmeans  
 
 class Visualizer:
     """
@@ -238,7 +239,7 @@ Instance: {self.__repr__()}"""
         plt.figure(figsize=(10, 10))
         for cluster in range(kmeans.k):
             indices = np.where(kmeans.clusters == cluster)
-            plt.scatter(reduced_data[indices, 0], reduced_data[indices, 1], label=f'Cl. {cluster} => ({instance.dataset._feature_names[kmeans.cluster_to_label[cluster]]})')
+            plt.scatter(reduced_data[indices, 0], reduced_data[indices, 1], label=f'Cl. {cluster} => ({instance.dataset._feature_names[kmeans.clusters_map[cluster]]})')
         
         # Calculate silhouette score in the t-SNE space
         silhouette = silhouette_score(reduced_data, kmeans.clusters)
